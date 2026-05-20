@@ -10,12 +10,21 @@ logger = logging.getLogger(__name__)
 PROVIDER_KEYS   = ['local', 'groq', 'cerebras']
 PROVIDER_LABELS = {
     'local':    'Qwen 2.5 1.5B  (Local · Free · GPU accelerated)',
-    'groq':     'Groq  (Free tier · 70B · sub-1s · falls back to local)',
-    'cerebras': 'Cerebras  (Free tier · ultra-fast)',
+    'groq':     'Groq  (Free tier · 70B · sub-1s · falls back to Cerebras)',
+    'cerebras': 'Cerebras  (Free tier · ultra-fast · falls back to Groq)',
 }
 GROQ_MODELS     = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant',
                    'meta-llama/llama-4-scout-17b-16e-instruct', 'openai/gpt-oss-120b']
 CEREBRAS_MODELS = ['llama3.1-8b', 'gpt-oss-120b']
+
+# ── Bundled API keys ─────────────────────────────────────────────────────────
+# Loaded from _bundled_keys.py (gitignored, baked into installer builds).
+# Falls back to empty strings in open-source / dev builds.
+try:
+    from _bundled_keys import CEREBRAS as _CB_KEY, GROQ as _GQ_KEY
+    _BUNDLED = {'cerebras': _CB_KEY, 'groq': _GQ_KEY}
+except ImportError:
+    _BUNDLED: dict = {'cerebras': '', 'groq': ''}
 
 _SSL_ERRS = ('SSL', 'CERTIFICATE', 'ConnectError', 'Connection error', 'certificate')
 
@@ -35,6 +44,11 @@ def _ssl_retry(call_fn):
             logger.warning('SSL/connection error — retrying without verification (antivirus detected)')
             return call_fn(verify=False)
         raise
+
+
+def _resolve_key(config: dict, provider: str) -> str:
+    """Return user-configured key, falling back to bundled key."""
+    return config.get('providers', {}).get(provider, {}).get('api_key', '') or _BUNDLED.get(provider, '')
 
 
 # ── Abstract base ────────────────────────────────────────────────────────────
@@ -66,7 +80,7 @@ class LocalProvider(Provider):
         self._lock    = threading.Lock()
 
     @property
-    def name(self) -> str:  return 'Qwen 2.5 1.5B (Local)'
+    def name(self)  -> str:  return 'Qwen 2.5 1.5B (Local)'
     @property
     def ready(self) -> bool: return self._ready
 
@@ -84,6 +98,14 @@ class LocalProvider(Provider):
     def load(self) -> None:
         if self._ready or self._loading:
             return
+        # Fail fast if llama_cpp is not installed (installer/cloud-only builds)
+        try:
+            import llama_cpp  # noqa: F401
+        except ImportError:
+            raise RuntimeError(
+                'Local AI is not included in this build.\n'
+                'Use Groq or Cerebras instead — both are free and much faster.'
+            )
         self._loading = True
         logger.info('Loading local GGUF model…')
 
@@ -99,7 +121,7 @@ class LocalProvider(Provider):
             except Exception as e:
                 err = str(e)
                 if 'SSL' in err or 'certificate' in err.lower():
-                    logger.warning('SSL error — antivirus HTTPS scanning detected. Retrying without verification.')
+                    logger.warning('SSL error — retrying without verification.')
                     self._ssl_bypass()
                     model_path = _dl()
                 else:
@@ -176,9 +198,9 @@ class CerebrasProvider(Provider):
 # ── Fallback wrapper ─────────────────────────────────────────────────────────
 
 class FallbackProvider(Provider):
-    """Cloud-primary provider with transparent local fallback on any failure."""
+    """Primary provider with transparent fallback to any secondary on failure."""
 
-    def __init__(self, primary: Provider, fallback: LocalProvider) -> None:
+    def __init__(self, primary: Provider, fallback: Provider) -> None:
         self._primary  = primary
         self._fallback = fallback
 
@@ -192,7 +214,7 @@ class FallbackProvider(Provider):
         try:
             return self._primary.refine(text, system_prompt)
         except Exception as e:
-            logger.warning(f'{self._primary.name} failed ({type(e).__name__}: {e!s:.80}) — falling back to local')
+            logger.warning(f'{self._primary.name} failed ({type(e).__name__}: {e!s:.80}) — falling back')
             if not self._fallback.ready:
                 self._fallback.load()
             return self._fallback.refine(text, system_prompt)
@@ -201,12 +223,27 @@ class FallbackProvider(Provider):
 # ── Factory ──────────────────────────────────────────────────────────────────
 
 def build_provider(config: dict) -> Provider:
-    active = config.get('active_provider', 'local')
+    active = config.get('active_provider', 'cerebras')
     p      = config.get('providers', {}).get(active, {})
-    if active == 'groq':
-        g = GroqProvider(api_key=p.get('api_key', ''), model=p.get('model', GROQ_MODELS[0]))
-        return FallbackProvider(g, LocalProvider()) if g.ready else g
+
+    cerebras_key = _resolve_key(config, 'cerebras')
+    groq_key     = _resolve_key(config, 'groq')
+    groq_model   = config.get('providers', {}).get('groq',     {}).get('model', GROQ_MODELS[0])
+    cb_model     = config.get('providers', {}).get('cerebras', {}).get('model', CEREBRAS_MODELS[0])
+
+    cerebras = CerebrasProvider(api_key=cerebras_key, model=cb_model)
+    groq     = GroqProvider(api_key=groq_key,         model=groq_model)
+
     if active == 'cerebras':
-        c = CerebrasProvider(api_key=p.get('api_key', ''), model=p.get('model', CEREBRAS_MODELS[0]))
-        return FallbackProvider(c, LocalProvider()) if c.ready else c
+        # Cerebras → Groq fallback (both cloud, no download needed)
+        if cerebras.ready and groq.ready:
+            return FallbackProvider(cerebras, groq)
+        return cerebras if cerebras.ready else LocalProvider()
+
+    if active == 'groq':
+        # Groq → Cerebras fallback
+        if groq.ready and cerebras.ready:
+            return FallbackProvider(groq, cerebras)
+        return groq if groq.ready else LocalProvider()
+
     return LocalProvider()

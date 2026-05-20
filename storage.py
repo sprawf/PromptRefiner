@@ -39,7 +39,7 @@ def log_path() -> str:
 
 DEFAULT_CONFIG: dict = {
     'version': VERSION,
-    'active_provider': 'local',
+    'active_provider': 'cerebras',   # fastest out of the box
     'autostart': True,
     'hotkeys': {
         'refine':  'alt+shift+w',

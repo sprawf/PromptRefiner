@@ -36,5 +36,11 @@ run.bat
 Thumbs.db
 desktop.ini
 
+# Bundled API keys — installer-only, never committed
+_bundled_keys.py
+
 # Distribution zip (built artefact)
 *.zip
+
+# Installer output
+release/
