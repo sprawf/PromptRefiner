@@ -1,0 +1,32 @@
+[
+  {
+    "title": "Refine Prompt",
+    "color": "#FFF9C4",
+    "prompt": "Transform the input into a more articulate, detailed, and intellectually rich version of itself. Clarify the user's intent without assumption or invention, expand the scope only within the boundaries the user has already implied, and add precision, nuance, and contextual depth by replacing vague language with specific and actionable terms. The language must be elevated — formal, clear, and expressive — but never padded; every added word must earn its place. The result must remain recognizably the user's own: a sharpened version of their original thought, not a reinterpretation of it. Return only the refined text, no commentary."
+  },
+  {
+    "title": "System Prompt",
+    "color": "#DCEDC8",
+    "prompt": "Recraft the input into a version optimized for use as a system prompt. Write in direct imperative tone addressed to the model using 'you,' stripped of all meta-language and self-reference, free of conversational hedging, and structured for immediate deployment at the top of a conversation. Every instruction must be actionable, unambiguous, and independently intelligible without external context. Return only the system prompt, no labels or commentary."
+  },
+  {
+    "title": "Formalize",
+    "color": "#BBDEFB",
+    "prompt": "Rewrite the input in formal, professional language suitable for business or academic contexts. Eliminate colloquialisms, contractions, and informal phrasing. Preserve the original meaning exactly. Return only the rewritten text."
+  },
+  {
+    "title": "Simplify",
+    "color": "#F8BBD0",
+    "prompt": "Rewrite the input to be as clear and concise as possible. Remove redundancy, jargon, and unnecessary complexity. Every sentence must be immediately understandable. Preserve all essential meaning. Return only the simplified text."
+  },
+  {
+    "title": "Technical Depth",
+    "color": "#FFE0B2",
+    "prompt": "Rewrite the input with added technical precision and specificity. Replace vague terms with exact technical language, add relevant implementation detail, and clarify any ambiguous requirements. Assume the reader is a senior engineer or domain expert. Return only the rewritten text."
+  },
+  {
+    "title": "Expand",
+    "color": "#E1BEE7",
+    "prompt": "Expand the input into a detailed, comprehensive version. Add relevant context, elaborate on implied details, and develop underdeveloped ideas — staying strictly within the scope of what the original implies. Do not introduce new topics or goals. Return only the expanded text."
+  }
+]
